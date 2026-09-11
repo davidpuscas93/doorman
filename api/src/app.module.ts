@@ -5,9 +5,10 @@ import { DatabaseModule } from './database/database.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { EventsModule } from './modules/events/events.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule, EventsModule],
   controllers: [AppController],
   providers: [AppService],
 })
