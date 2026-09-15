@@ -1,5 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { DataSource, In } from 'typeorm';
+import { Queue } from 'bullmq';
 
 import { Ticket } from './entities/ticket.entity';
 import { TicketType } from '../ticket-types/entities/ticket-type.entity';
@@ -7,7 +9,10 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 
 @Injectable()
 export class TicketsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectQueue('tickets') private readonly ticketsQueue: Queue,
+    private readonly dataSource: DataSource,
+  ) {}
 
   async hold(ticketTypeId: string, quantity: number, userId: string) {
     return this.dataSource.transaction(async (manager) => {
@@ -43,7 +48,7 @@ export class TicketsService {
   }
 
   async checkout(userId: string, eventId: string) {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       // 1. Re-read from the database what this user is ACTUALLY holding, right now.
       const tickets = await manager
         .createQueryBuilder(Ticket, 'ticket')
@@ -95,5 +100,11 @@ export class TicketsService {
 
       return { transaction, tickets };
     });
+
+    await this.ticketsQueue.add('send-tickets', {
+      transactionId: result.transaction.id,
+    });
+
+    return result;
   }
 }
