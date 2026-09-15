@@ -3,12 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Redis from 'ioredis';
 
-import { CreateEventDto } from './dto/create-event.dto';
-import { UpdateEventDto } from './dto/update-event.dto';
-
-import { User } from '../users/entities/user.entity';
 import { Ticket } from '../tickets/entities/ticket.entity';
 import { Event } from './entities/event.entity';
+
 import { REDIS_CLIENT } from '../../redis/redis.module';
 
 @Injectable()
@@ -18,8 +15,6 @@ export class EventsService {
   constructor(
     @InjectRepository(Event)
     private readonly eventsRepository: Repository<Event>,
-    @InjectRepository(User)
-    private readonly usersRepository: Repository<User>,
     @InjectRepository(Ticket)
     private readonly ticketsRepository: Repository<Ticket>,
     @Inject(REDIS_CLIENT)
@@ -77,21 +72,5 @@ export class EventsService {
     }
 
     return result;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} event`;
-  }
-
-  create(createEventDto: CreateEventDto) {
-    return 'This action adds a new event';
-  }
-
-  update(id: number, updateEventDto: UpdateEventDto) {
-    return `This action updates a #${id} event`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} event`;
   }
 }
