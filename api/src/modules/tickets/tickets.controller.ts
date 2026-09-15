@@ -1,10 +1,13 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
+
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
 
+  @UseGuards(RateLimitGuard)
   @Post('hold')
   hold(
     @Body() body: { ticketTypeId: string; quantity: number; userId: string },
