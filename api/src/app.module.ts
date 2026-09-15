@@ -7,11 +7,13 @@ import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './modules/events/events.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
+    RedisModule,
     EventsModule,
     TicketsModule,
   ],
