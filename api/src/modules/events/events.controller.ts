@@ -2,8 +2,10 @@ import {
   Controller,
   Get,
   Query,
+  Param,
   DefaultValuePipe,
   ParseIntPipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { EventsService } from './events.service';
 
@@ -17,5 +19,10 @@ export class EventsController {
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
   ) {
     return this.eventsService.findAll(limit, offset);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.eventsService.findOne(id);
   }
 }

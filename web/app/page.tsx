@@ -50,7 +50,7 @@ export default async function HomePage() {
                 month: "long",
                 year: "numeric",
               })}
-              {event.organizer ? ` .${event.organizer}` : ""}
+              {event.organizer ? ` · ${event.organizer}` : ''}
             </p>
 
             <p style={{ margin: "8px 0 0", fontSize: 14 }}>
