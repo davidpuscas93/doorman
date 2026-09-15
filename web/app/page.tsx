@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type EventListItem = {
   id: string;
   title: string;
@@ -33,31 +35,25 @@ export default async function HomePage() {
       <h1>Events</h1>
       <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: 12 }}>
         {events.map((event) => (
-          <li
-            key={event.id}
-            style={{
-              background: "#fff",
-              border: "1px solid #E2E5E9",
-              borderRadius: 6,
-              padding: 16,
-            }}
-          >
-            <h2 style={{ margin: "0 0 4px", fontSize: 18 }}>{event.title}</h2>
+          <li key={event.id}>
+            <Link href={`/events/${event.id}`} className="event-card">
+              <h2 style={{ margin: "0 0 4px", fontSize: 18 }}>{event.title}</h2>
 
-            <p style={{ margin: 0, color: "#666", fontSize: 14 }}>
-              {new Date(event.startsAt).toLocaleDateString("ro-RO", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-              {event.organizer ? ` · ${event.organizer}` : ''}
-            </p>
+              <p style={{ margin: 0, color: "#666", fontSize: 14 }}>
+                {new Date(event.startsAt).toLocaleDateString("ro-RO", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+                {event.organizer ? ` · ${event.organizer}` : ""}
+              </p>
 
-            <p style={{ margin: "8px 0 0", fontSize: 14 }}>
-              {event.available > 0
-                ? `${event.available} tickets available`
-                : "Sold out"}
-            </p>
+              <p style={{ margin: "8px 0 0", fontSize: 14 }}>
+                {event.available > 0
+                  ? `${event.available} tickets available`
+                  : "Sold out"}
+              </p>
+            </Link>
           </li>
         ))}
       </ul>
