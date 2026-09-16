@@ -6,9 +6,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 import { DatabaseModule } from './database/database.module';
+import { RedisModule } from './redis/redis.module';
+
+import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
-import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { RedisModule } from './redis/redis.module';
     }),
     DatabaseModule,
     RedisModule,
+    AuthModule,
     EventsModule,
     TicketsModule,
   ],

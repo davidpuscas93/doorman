@@ -11,6 +11,9 @@ export class User {
   @Column({ type: 'text' })
   email: string;
 
+  @Column({ name: 'password_hash', type: 'text', nullable: true })
+  passwordHash: string | null;
+
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
