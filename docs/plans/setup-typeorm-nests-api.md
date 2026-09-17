@@ -1,7 +1,7 @@
 # Set up TypeORM in the NestJS `api` project
 
 ## Context
-The `api` project (`/Users/davidpuscas/Developer/ParsecStudios/doorman/api`) is a freshly scaffolded Nest 12 / TypeScript 6 app with no database layer yet — just `AppModule`/`AppController`/`AppService` and no `@nestjs/config`, `typeorm`, or env-loading of any kind. The repo's `docker-compose.yml` already runs Postgres 18 on host port `5433` (container port 5432) with credentials from the root `.env` (`POSTGRES_USER=doorman_user`, `POSTGRES_PASSWORD=doorman_password`, `POSTGRES_DB=doorman_db`). This task wires the `api` project to that database via TypeORM, without yet adding any entities or migrations — just the connection scaffolding, migration tooling, and env files needed for future work to build on.
+The `api` project (`/Users/davidpuscas/Developer/ParsecStudios/doorman/api`) is a freshly scaffolded Nest 12 / TypeScript 6 app with no database layer yet — just `AppModule`/`AppController`/`AppService` and no `@nestjs/config`, `typeorm`, or env-loading of any kind. The repo's `docker-compose.yml` already runs Postgres 18 on host port `5433` (container port 5432) with credentials from the root `.env` (`POSTGRES_USER=doorman_user`, `POSTGRES_PASSWORD=your_postgres_password`, `POSTGRES_DB=doorman_db`). This task wires the `api` project to that database via TypeORM, without yet adding any entities or migrations — just the connection scaffolding, migration tooling, and env files needed for future work to build on.
 
 ## Packages
 In `api/`:
@@ -20,7 +20,7 @@ In `api/`:
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5433
 POSTGRES_USER=doorman_user
-POSTGRES_PASSWORD=doorman_password
+POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=doorman_db
 ```
 

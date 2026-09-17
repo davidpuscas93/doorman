@@ -106,7 +106,7 @@ export class RedisModule implements OnModuleDestroy {
  POSTGRES_HOST=localhost
  POSTGRES_PORT=5433
  POSTGRES_USER=doorman_user
- POSTGRES_PASSWORD=doorman_password
+ POSTGRES_PASSWORD=your_postgres_password
  POSTGRES_DB=doorman_db
 +REDIS_HOST=localhost
 +REDIS_PORT=6379
