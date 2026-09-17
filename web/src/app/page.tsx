@@ -9,7 +9,7 @@ type EventListItem = {
 };
 
 async function getEvents(): Promise<EventListItem[]> {
-  const response = await fetch(`${process.env.API_URL}/events?limit=20`, {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events?limit=20`, {
     cache: "no-store",
   });
 

@@ -20,7 +20,7 @@ type EventDetails = {
 };
 
 async function getEvent(id: string): Promise<EventDetails | null> {
-  const response = await fetch(`${process.env.API_URL}/events/${id}`, {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/${id}`, {
     cache: "no-store",
   });
 
