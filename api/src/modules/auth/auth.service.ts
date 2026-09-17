@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import * as argon2 from 'argon2';
 
@@ -24,6 +24,7 @@ export class AuthService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(RefreshToken)
     private readonly refreshTokensRepository: Repository<RefreshToken>,
+    private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
   ) {}
@@ -95,64 +96,75 @@ export class AuthService {
   }
 
   async refresh(token: string) {
-    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const result = await this.dataSource.transaction(async (manager) => {
+      const tokenHash = createHash('sha256').update(token).digest('hex');
 
-    const refreshToken = await this.refreshTokensRepository
-      .createQueryBuilder('refresh_token')
-      .where('refresh_token.tokenHash = :tokenHash', { tokenHash })
-      .getOne();
+      const refreshToken = await manager
+        .createQueryBuilder(RefreshToken, 'refresh_token')
+        .setLock('pessimistic_write')
+        .where('refresh_token.tokenHash = :tokenHash', { tokenHash })
+        .getOne();
 
-    if (!refreshToken) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+      if (!refreshToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
 
-    if (refreshToken.revokedAt) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+      if (refreshToken.revokedAt) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
 
-    if (refreshToken.expiresAt.getTime() < Date.now()) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+      if (refreshToken.expiresAt.getTime() < Date.now()) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
 
-    if (refreshToken.usedAt) {
-      await this.refreshTokensRepository.update(
-        {
-          familyId: refreshToken.familyId,
-          revokedAt: IsNull(),
-        },
-        { revokedAt: new Date() },
+      if (refreshToken.usedAt) {
+        await manager.update(
+          RefreshToken,
+          {
+            familyId: refreshToken.familyId,
+            revokedAt: IsNull(),
+          },
+          { revokedAt: new Date() },
+        );
+        return null;
+      }
+
+      const user = await manager.findOneBy(User, {
+        id: refreshToken.userId,
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      await manager.update(RefreshToken, refreshToken.id, {
+        usedAt: new Date(),
+      });
+
+      const accessToken = await this.signAccessToken(user);
+      const newRefreshToken = await this.issueRefreshToken(
+        refreshToken.userId,
+        refreshToken.familyId,
+        manager,
       );
+
+      return {
+        accessToken,
+        refreshToken: newRefreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+      };
+    });
+
+    if (!result) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const user = await this.usersRepository.findOneBy({
-      id: refreshToken.userId,
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    await this.refreshTokensRepository.update(refreshToken.id, {
-      usedAt: new Date(),
-    });
-
-    const accessToken = await this.signAccessToken(user);
-    const newRefreshToken = await this.issueRefreshToken(
-      refreshToken.userId,
-      refreshToken.familyId,
-    );
-
-    return {
-      accessToken,
-      refreshToken: newRefreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
-    };
+    return result;
   }
 
   private signAccessToken(user: User) {
@@ -166,7 +178,12 @@ export class AuthService {
   private async issueRefreshToken(
     userId: string,
     familyId?: string,
+    manager?: EntityManager,
   ): Promise<string> {
+    const repository = manager
+      ? manager.getRepository(RefreshToken)
+      : this.refreshTokensRepository;
+
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
@@ -175,14 +192,14 @@ export class AuthService {
     );
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-    const refreshToken = this.refreshTokensRepository.create({
+    const refreshToken = repository.create({
       userId,
       tokenHash,
       familyId: familyId ?? randomUUID(),
       expiresAt,
     });
 
-    await this.refreshTokensRepository.save(refreshToken);
+    await repository.save(refreshToken);
 
     return token;
   }
