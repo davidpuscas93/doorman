@@ -8,6 +8,7 @@ import { TicketType } from '../ticket-types/entities/ticket-type.entity';
 import { Event } from './entities/event.entity';
 
 import { REDIS_CLIENT } from '../../redis/redis.module';
+import { CreateEventDto } from './dto/create-event.dto';
 
 @Injectable()
 export class EventsService {
@@ -127,5 +128,45 @@ export class EventsService {
     };
 
     return result;
+  }
+
+  async create(dto: CreateEventDto, userId: string) {
+    const event = this.eventsRepository.create({
+      title: dto.title,
+      location: dto.location,
+      description: dto.description ?? null,
+      startsAt: dto.startsAt,
+      userId,
+    });
+
+    await this.eventsRepository.save(event);
+
+    try {
+      await this.invalidateEventsListCache();
+    } catch (err) {
+      this.logger.warn(`Cache invalidation failed: ${(err as Error).message}`);
+    }
+
+    return {
+      id: event.id,
+      title: event.title,
+      location: event.location,
+      description: event.description ?? null,
+      startsAt: event.startsAt,
+      createdAt: event.createdAt,
+    };
+  }
+
+  private async invalidateEventsListCache() {
+    const stream = this.redisClient.scanStream({
+      match: 'events:list:*',
+      count: 100,
+    });
+
+    for await (const keys of stream) {
+      if (keys.length > 0) {
+        await this.redisClient.del(...keys);
+      }
+    }
   }
 }
