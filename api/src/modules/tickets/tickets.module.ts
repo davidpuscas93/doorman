@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { RedisModule } from '../../redis/redis.module';
+import { AuthModule } from '../auth/auth.module';
 
 import { TicketsService } from './tickets.service';
 import { TicketsController } from './tickets.controller';
@@ -17,6 +18,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
     TypeOrmModule.forFeature([Ticket, TicketType, Transaction]),
     RedisModule,
     BullModule.registerQueue({ name: 'tickets' }),
+    AuthModule,
   ],
   controllers: [TicketsController],
   providers: [TicketsService, TicketsProcessor],

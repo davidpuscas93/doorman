@@ -1,7 +1,6 @@
 import * as z from 'zod';
 
 export const checkoutSchema = z.object({
-  userId: z.uuid(),
   eventId: z.uuid(),
 });
 
