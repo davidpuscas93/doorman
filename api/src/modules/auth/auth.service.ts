@@ -95,6 +95,26 @@ export class AuthService {
     };
   }
 
+  async logout(token: string): Promise<void> {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const refreshToken = await this.refreshTokensRepository
+      .createQueryBuilder('refresh_token')
+      .where(`refresh_token.tokenHash = :tokenHash`, { tokenHash })
+      .getOne();
+
+    if (!refreshToken) {
+      return;
+    }
+
+    await this.refreshTokensRepository.update(
+      {
+        familyId: refreshToken.familyId,
+        revokedAt: IsNull(),
+      },
+      { revokedAt: new Date() },
+    );
+  }
+
   async refresh(token: string) {
     const result = await this.dataSource.transaction(async (manager) => {
       const tokenHash = createHash('sha256').update(token).digest('hex');

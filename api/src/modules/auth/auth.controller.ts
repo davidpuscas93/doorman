@@ -4,6 +4,8 @@ import {
   Body,
   Res,
   Req,
+  HttpCode,
+  HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -46,6 +48,23 @@ export class AuthController {
       accessToken: result.accessToken,
       user: result.user,
     };
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('logout')
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = request.cookies?.['refresh_token'] as
+      string | undefined;
+    response.clearCookie('refresh_token', { path: '/auth' });
+
+    if (!refreshToken) {
+      return;
+    }
+
+    await this.authService.logout(refreshToken);
   }
 
   @Post('refresh')
