@@ -70,7 +70,11 @@ export class TicketsService {
       }
 
       await manager.save(tickets);
-      return tickets;
+      return tickets.map((ticket) => ({
+        id: ticket.id,
+        ticketTypeId: ticket.ticketTypeId,
+        heldUntil: ticket.heldUntil,
+      }));
     });
   }
 
@@ -156,7 +160,7 @@ export class TicketsService {
   }
 
   async findActiveHolds(userId: string, eventId: string) {
-    return this.ticketsRepository.find({
+    const tickets = await this.ticketsRepository.find({
       where: {
         eventId,
         heldByUserId: userId,
@@ -164,5 +168,11 @@ export class TicketsService {
         heldUntil: MoreThan(new Date()),
       },
     });
+
+    return tickets.map((ticket) => ({
+      id: ticket.id,
+      ticketTypeId: ticket.ticketTypeId,
+      heldUntil: ticket.heldUntil,
+    }));
   }
 }

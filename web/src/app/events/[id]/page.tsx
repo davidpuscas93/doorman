@@ -69,7 +69,7 @@ export default async function EventPage({
 
       <h2 style={{ margin: "32px 0 12px", fontSize: 18 }}>Tickets</h2>
 
-      <TicketPurchase eventId={event.id} ticketTypes={event.ticketTypes} />
+      <TicketPurchase key={event.id} eventId={event.id} ticketTypes={event.ticketTypes} />
     </main>
   );
 }

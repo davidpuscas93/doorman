@@ -34,7 +34,15 @@ export function SiteHeader() {
           fontSize: 14,
         }}
       >
-        <Link href="/" style={{ fontWeight: 600, color: "inherit" }}>
+        <Link
+          href="/"
+          style={{
+            fontWeight: 600,
+            padding: "6px 12px",
+            border: "1px solid transparent",
+            color: "inherit",
+          }}
+        >
           Doorman
         </Link>
 

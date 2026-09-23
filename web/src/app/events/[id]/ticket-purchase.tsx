@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useSyncExternalStore } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -378,15 +379,33 @@ export function TicketPurchase({
               padding: 0,
               margin: 0,
               display: "grid",
-              gap: 4,
+              gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+              gap: 16,
             }}
           >
             {purchase.tickets.map((ticket) => (
               <li
                 key={ticket.id}
-                style={{ fontSize: 13, fontFamily: "ui-monospace, monospace" }}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #cfe3e1",
+                  borderRadius: 6,
+                  padding: 12,
+                  display: "grid",
+                  justifyItems: "center",
+                  gap: 8,
+                }}
               >
-                {ticket.qrCode}
+                <QRCodeSVG value={ticket.qrCode} size={120} level="M" />
+                <code
+                  style={{
+                    fontSize: 11,
+                    color: "#666",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {ticket.qrCode}
+                </code>
               </li>
             ))}
           </ul>
