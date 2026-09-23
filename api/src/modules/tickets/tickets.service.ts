@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { DataSource, In } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, MoreThan, Repository } from 'typeorm';
 import { Queue } from 'bullmq';
 
 import { Ticket } from './entities/ticket.entity';
@@ -15,6 +16,8 @@ export class TicketsService {
   constructor(
     @InjectQueue('tickets') private readonly ticketsQueue: Queue,
     private readonly dataSource: DataSource,
+    @InjectRepository(Ticket)
+    private readonly ticketsRepository: Repository<Ticket>,
   ) {}
 
   async hold(ticketTypeId: string, quantity: number, userId: string) {
@@ -130,5 +133,36 @@ export class TicketsService {
     });
 
     return result;
+  }
+
+  async release(
+    userId: string,
+    eventId: string,
+  ): Promise<{ released: number }> {
+    const result = await this.ticketsRepository.update(
+      {
+        eventId,
+        heldByUserId: userId,
+        status: 'held',
+      },
+      {
+        status: 'available',
+        heldByUserId: null,
+        heldUntil: null,
+      },
+    );
+
+    return { released: result.affected ?? 0 };
+  }
+
+  async findActiveHolds(userId: string, eventId: string) {
+    return this.ticketsRepository.find({
+      where: {
+        eventId,
+        heldByUserId: userId,
+        status: 'held',
+        heldUntil: MoreThan(new Date()),
+      },
+    });
   }
 }

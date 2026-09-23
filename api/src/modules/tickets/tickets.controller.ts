@@ -1,4 +1,12 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
@@ -7,10 +15,9 @@ import type { JwtPayload } from '../../common/guards/jwt-auth.guard';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
-import { holdSchema } from './dto/hold.dto';
-import { checkoutSchema } from './dto/checkout.dto';
-import type { HoldDto } from './dto/hold.dto';
-import type { CheckoutDto } from './dto/checkout.dto';
+import { holdSchema, type HoldDto } from './dto/hold.dto';
+import { checkoutSchema, type CheckoutDto } from './dto/checkout.dto';
+import { releaseSchema, type ReleaseDto } from './dto/release.dto';
 
 @Controller('tickets')
 export class TicketsController {
@@ -32,5 +39,23 @@ export class TicketsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.ticketsService.checkout(user.sub, body.eventId);
+  }
+
+  @UseGuards(RateLimitGuard, JwtAuthGuard)
+  @Post('release')
+  release(
+    @Body({ schema: releaseSchema }) body: ReleaseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ticketsService.release(user.sub, body.eventId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('holds')
+  findActiveHolds(
+    @Query('eventId', ParseUUIDPipe) eventId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ticketsService.findActiveHolds(user.sub, eventId);
   }
 }

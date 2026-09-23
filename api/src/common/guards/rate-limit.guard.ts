@@ -11,7 +11,7 @@ import Redis from 'ioredis';
 
 import { REDIS_CLIENT } from '../../redis/redis.module';
 
-const LIMIT = 10;
+const LIMIT = 15;
 const WINDOW_SECONDS = 60;
 
 @Injectable()

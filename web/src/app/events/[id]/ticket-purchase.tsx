@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/common/auth/auth-context";
+
 import { formatPrice } from "@/common/helpers/price.helpers";
+import {
+  formatCountdown,
+  subscribeToSecond,
+  getNowSeconds,
+  getServerNowSeconds,
+} from "@/common/helpers/time.helpers";
 
 type TicketTier = {
   id: string;
@@ -17,6 +24,7 @@ type TicketTier = {
 type HeldTicket = {
   id: string;
   ticketTypeId: string;
+  heldUntil: string;
 };
 
 type PurchasedTicket = {
@@ -48,11 +56,30 @@ export function TicketPurchase({
 
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [isReleasing, setIsReleasing] = useState(false);
 
   const heldByTier = held.reduce<Record<string, number>>((counts, ticket) => {
     counts[ticket.ticketTypeId] = (counts[ticket.ticketTypeId] ?? 0) + 1;
     return counts;
   }, {});
+
+  const nowSeconds = useSyncExternalStore(
+    subscribeToSecond,
+    getNowSeconds,
+    getServerNowSeconds,
+  );
+
+  const expiresAtSeconds = held.length
+    ? Math.min(
+        ...held.map((t) => Math.floor(new Date(t.heldUntil).getTime() / 1000)),
+      )
+    : null;
+
+  const secondsLeft = expiresAtSeconds
+    ? Math.max(0, expiresAtSeconds - nowSeconds)
+    : 0;
+
+  const hasExpired = expiresAtSeconds !== null && secondsLeft === 0;
 
   async function handleHold(tier: TicketTier) {
     setPendingTierId(tier.id);
@@ -80,6 +107,7 @@ export function TicketPurchase({
       setError(null);
       const tickets = (await response.json()) as HeldTicket[];
       setHeld((current) => [...current, ...tickets]);
+      router.refresh();
     } finally {
       clearTimeout(timer);
       setShowPending(false);
@@ -114,6 +142,69 @@ export function TicketPurchase({
       setIsCheckingOut(false);
     }
   }
+
+  async function handleRelease() {
+    setIsReleasing(true);
+
+    try {
+      const response = await authFetch("/tickets/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          message?: string;
+        } | null;
+
+        setError(body?.message ?? "Could not release those tickets.");
+        return;
+      }
+
+      setError(null);
+      setHeld([]);
+
+      router.refresh();
+    } finally {
+      setIsReleasing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!user) return;
+
+    let ignore = false;
+
+    async function loadHolds() {
+      const response = await authFetch(`/tickets/holds?eventId=${eventId}`);
+      if (!response.ok) return;
+
+      const tickets = (await response.json()) as HeldTicket[];
+      if (!ignore) setHeld(tickets);
+    }
+
+    void loadHolds();
+
+    return () => {
+      ignore = true;
+    };
+  }, [user, eventId, authFetch]);
+
+  useEffect(() => {
+    if (!expiresAtSeconds) return;
+
+    const timer = setTimeout(
+      () => {
+        setHeld([]);
+        setError("Your hold expired.");
+        router.refresh();
+      },
+      expiresAtSeconds * 1000 - Date.now(),
+    );
+
+    return () => clearTimeout(timer);
+  }, [expiresAtSeconds, router]);
 
   return (
     <>
@@ -208,7 +299,11 @@ export function TicketPurchase({
 
       {held.length > 0 && (
         <div style={{ marginTop: 16, fontSize: 14 }}>
-          <div style={{ fontWeight: 500, marginBottom: 4 }}>On hold</div>
+          <div style={{ fontWeight: 500, marginBottom: 4 }}>
+            {hasExpired
+              ? "Hold expired"
+              : `On hold · expires in ${formatCountdown(secondsLeft)}`}
+          </div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {ticketTypes
               .filter((tier) => heldByTier[tier.id])
@@ -223,23 +318,41 @@ export function TicketPurchase({
       )}
 
       {held.length > 0 && !purchase && (
-        <button
-          type="button"
-          onClick={handleCheckout}
-          disabled={isCheckingOut}
-          style={{
-            marginTop: 12,
-            padding: "10px 16px",
-            fontSize: 14,
-            border: "none",
-            borderRadius: 6,
-            background: "#0e6b65",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Complete purchase
-        </button>
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          {!hasExpired && (
+            <button
+              type="button"
+              onClick={handleCheckout}
+              disabled={isCheckingOut || isReleasing}
+              style={{
+                padding: "10px 16px",
+                fontSize: 14,
+                border: "none",
+                borderRadius: 6,
+                background: "#0e6b65",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Complete purchase
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleRelease}
+            disabled={isCheckingOut || isReleasing}
+            style={{
+              padding: "10px 16px",
+              fontSize: 14,
+              border: "1px solid #e2e5e9",
+              borderRadius: 6,
+              background: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Release
+          </button>
+        </div>
       )}
 
       {purchase && (

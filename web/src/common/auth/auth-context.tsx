@@ -70,6 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasRestored = useRef(false);
   const accessTokenRef = useRef<string | null>(null);
 
+  const setSession = useCallback(
+    (token: string | null, nextUser: AuthUser | null) => {
+      accessTokenRef.current = token;
+      setAccessToken(token);
+      setUser(nextUser);
+    },
+    [],
+  );
+
   const login = useCallback(
     async (email: string, password: string): Promise<void> => {
       const response = await fetch(`${API_URL}/auth/login`, {
@@ -88,11 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: AuthUser;
       };
 
-      setAccessToken(data.accessToken);
-      setUser(data.user);
+      setSession(data.accessToken, data.user);
       rememberSession();
     },
-    [],
+    [setSession],
   );
 
   const logout = useCallback(async (): Promise<void> => {
@@ -104,11 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       warn("logout request failed; clearing the session locally", error);
     } finally {
-      setAccessToken(null);
-      setUser(null);
+      setSession(null, null);
       forgetSession();
     }
-  }, []);
+  }, [setSession]);
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     try {
@@ -118,8 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        setAccessToken(null);
-        setUser(null);
+        setSession(null, null);
         forgetSession();
         return null;
       }
@@ -129,16 +135,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: AuthUser;
       };
 
-      setAccessToken(data.accessToken);
-      setUser(data.user);
+      setSession(data.accessToken, data.user);
       rememberSession();
 
       return data.accessToken;
     } catch (error) {
-      warn('refresh request failed', error);
+      warn("refresh request failed", error);
       return null;
     }
-  }, []);
+  }, [setSession]);
 
   const authFetch = useCallback(
     async (path: string, init: RequestInit = {}): Promise<Response> => {
@@ -173,10 +178,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({ user, accessToken, isLoading, login, logout, authFetch }),
     [user, accessToken, isLoading, login, logout, authFetch],
   );
-
-  useEffect(() => {
-    accessTokenRef.current = accessToken;
-  }, [accessToken]);
 
   useEffect(() => {
     if (hasRestored.current) return;
