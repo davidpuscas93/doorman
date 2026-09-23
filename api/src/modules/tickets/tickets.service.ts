@@ -4,8 +4,11 @@ import { DataSource, In } from 'typeorm';
 import { Queue } from 'bullmq';
 
 import { Ticket } from './entities/ticket.entity';
+import { User } from '../users/entities/user.entity';
 import { TicketType } from '../ticket-types/entities/ticket-type.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
+
+const MAX_ACTIVE_HOLDS_PER_USER = 10;
 
 @Injectable()
 export class TicketsService {
@@ -16,6 +19,27 @@ export class TicketsService {
 
   async hold(ticketTypeId: string, quantity: number, userId: string) {
     return this.dataSource.transaction(async (manager) => {
+      // 1. Serialise this user's holds
+      await manager
+        .createQueryBuilder(User, 'user')
+        .setLock('pessimistic_write')
+        .where('user.id = :userId', { userId })
+        .getOne();
+
+      // 2. Count what they're already holding
+      const activeHolds = await manager
+        .createQueryBuilder(Ticket, 'ticket')
+        .where('ticket.heldByUserId = :userId', { userId })
+        .andWhere('ticket.status = :status', { status: 'held' })
+        .andWhere('ticket.heldUntil > now()')
+        .getCount();
+
+      if (activeHolds + quantity > MAX_ACTIVE_HOLDS_PER_USER) {
+        throw new BadRequestException(
+          `You can hold at most ${MAX_ACTIVE_HOLDS_PER_USER} tickets at a time. You currently hold ${activeHolds}.`,
+        );
+      }
+
       const tickets = await manager
         .createQueryBuilder(Ticket, 'ticket')
         .setLock('pessimistic_write')

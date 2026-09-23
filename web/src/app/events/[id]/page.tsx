@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-import { formatPrice } from "@/common/helpers/price.helpers";
+import { TicketPurchase } from "./ticket-purchase";
 
 type TicketTier = {
   id: string;
@@ -20,9 +20,12 @@ type EventDetails = {
 };
 
 async function getEvent(id: string): Promise<EventDetails | null> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/${id}`, {
-    cache: "no-store",
-  });
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/events/${id}`,
+    {
+      cache: "no-store",
+    },
+  );
 
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Failed to load event: ${response.status}`);
@@ -66,34 +69,7 @@ export default async function EventPage({
 
       <h2 style={{ margin: "32px 0 12px", fontSize: 18 }}>Tickets</h2>
 
-      <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: 8 }}>
-        {event.ticketTypes.map((tier) => (
-          <li
-            key={tier.id}
-            style={{
-              background: "#fff",
-              border: "1px solid #E2E5E9",
-              borderRadius: 6,
-              padding: 16,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 16,
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 500 }}>{tier.name}</div>
-              <div style={{ fontSize: 14, color: "#666" }}>
-                {tier.available > 0
-                  ? `${tier.available} available`
-                  : "Sold out"}
-              </div>
-            </div>
-            <div style={{ fontVariantNumeric: "tabular-nums" }}>
-              {formatPrice(tier.price)}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <TicketPurchase eventId={event.id} ticketTypes={event.ticketTypes} />
     </main>
   );
 }
