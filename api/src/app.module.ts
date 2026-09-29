@@ -2,11 +2,9 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './redis/redis.module';
+import { HealthModule } from './health/health.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
@@ -26,11 +24,10 @@ import { TicketsModule } from './modules/tickets/tickets.module';
     }),
     DatabaseModule,
     RedisModule,
+    HealthModule,
     AuthModule,
     EventsModule,
     TicketsModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

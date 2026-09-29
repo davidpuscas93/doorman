@@ -1,5 +1,7 @@
 import { DataSource } from 'typeorm';
 
+import { migrations } from '../migrations';
+
 process.loadEnvFile();
 
 export default new DataSource({
@@ -10,7 +12,7 @@ export default new DataSource({
   password: process.env.POSTGRES_PASSWORD,
   database: process.env.POSTGRES_DB,
   entities: ['src/**/*.entity.ts'],
-  migrations: ['src/migrations/*.ts'],
+  migrations,
   synchronize: false,
   migrationsRun: false,
 });

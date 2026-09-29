@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { migrations } from '../migrations';
+
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -17,7 +19,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         autoLoadEntities: true,
         synchronize: false,
         migrationsRun: false,
-        migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+        migrations,
       }),
     }),
   ],
