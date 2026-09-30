@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import { JwtService } from '@nestjs/jwt';
 
 import type { Harness } from './harness';
 
@@ -11,6 +12,11 @@ export type TestUser = {
   password: string;
   accessToken: string;
   refreshCookie: string;
+};
+
+export type TokenUser = {
+  id: string;
+  accessToken: string;
 };
 
 export async function createUser(
@@ -91,4 +97,35 @@ export async function createEventWithTier(
   );
 
   return { eventId: event.id, ticketTypeId: ticketType.id };
+}
+
+/**
+ * Users created straight in the database with tokens signed directly - no
+ * registration, no argon2. This test is about row locking, not about login,
+ * and fifty password hashes would be most of its runtime.
+ */
+export async function createUsersWithTokens(
+  harness: Harness,
+  count: number,
+): Promise<TokenUser[]> {
+  const rows = (await harness.dataSource.query(
+    `INSERT INTO users (email, name, role)
+     SELECT 'load-' || gen_random_uuid() || '@example.com', 'Load User', 'buyer'
+     FROM generate_series(1, $1::int)
+     RETURNING id, email`,
+    [count],
+  )) as { id: string; email: string }[];
+
+  const jwtService = harness.app.get(JwtService);
+
+  return Promise.all(
+    rows.map(async (row) => ({
+      id: row.id,
+      accessToken: await jwtService.signAsync({
+        sub: row.id,
+        email: row.email,
+        role: 'buyer',
+      }),
+    })),
+  );
 }
