@@ -8,6 +8,7 @@ import {
 import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 
 import { AppModule } from '../src/app.module';
+import { configureApp } from '../src/setup-app';
 
 export type Harness = {
   app: INestApplication;
@@ -15,7 +16,9 @@ export type Harness = {
   stop: () => Promise<void>;
 };
 
-export async function startHarness(): Promise<Harness> {
+export async function startHarness(
+  options: { env?: Record<string, string> } = {},
+): Promise<Harness> {
   const postgres: StartedPostgreSqlContainer = await new PostgreSqlContainer(
     'postgres:18',
   ).start();
@@ -33,12 +36,15 @@ export async function startHarness(): Promise<Harness> {
   process.env.POSTGRES_DB = postgres.getDatabase();
   process.env.REDIS_HOST = redis.getHost();
   process.env.REDIS_PORT = String(redis.getPort());
+  process.env.RATE_LIMIT_PER_MINUTE = '1000';
+
+  Object.assign(process.env, options.env ?? {});
 
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
 
-  const app = moduleRef.createNestApplication();
+  const app = configureApp(moduleRef.createNestApplication());
   await app.init();
 
   const dataSource = app.get(DataSource);
