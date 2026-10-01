@@ -65,15 +65,22 @@ over HTTPS.
 
 - Ticket availability is derived by counting rows, not stored as a mutable counter, so it cannot
   drift. Holds expire by timestamp rather than by a job that might not run.
-- Overselling is prevented in the database (`FOR UPDATE SKIP LOCKED` inside a transaction),
-  not in application logic that a retry or a second process could bypass.
+- Overselling is prevented in the database — a transaction with `FOR UPDATE` on the ticket rows —
+  not in application logic that a retry or a second process could bypass. (`SKIP LOCKED` is on the
+  same query but buys throughput, not correctness; see `concurrency-and-locking.md` §3.)
+- A per-user cap of 10 concurrent holds is enforced inside `hold()`'s transaction, which takes a
+  `FOR UPDATE` lock on the **user** row before counting that user's active holds. Locking the
+  ticket rows is not enough here: the invariant is about the user, so the user row is the row to
+  lock. Lock order is always user, then tickets, so two of these can't deadlock each other.
 - Refresh token rotation includes reuse detection: a token presented twice revokes its whole
   family, on the assumption that the duplicate means a leak.
 
 **Known gaps, by design decision rather than oversight:**
 
-- No per-user cap on concurrent holds. `quantity` is capped at 10 *per request*, but a user can
-  repeat the request. The fix belongs inside `hold()`'s transaction, after the lock.
+- Multi-ticket holds are all-or-nothing, so tickets can go unsold while people are still asking for
+  them, whenever the remaining supply is smaller than any pending request's quantity. `SKIP LOCKED`
+  can also report "sold out" for a row that is freed a moment later. Both are product decisions
+  rather than bugs, but they should be stated as decisions.
 - Checkout marks the transaction `accepted` immediately. A real payment provider requires
   pending → webhook → accepted, with idempotency keys so a retried webhook doesn't double-charge.
 
@@ -87,15 +94,27 @@ over HTTPS.
   migrations, run deliberately.
 - Errors are thrown as Nest HTTP exceptions with generic messages. Internal errors are not
   echoed to the client.
+- CORS is configured with an **explicit origin** from `CORS_ORIGIN` and `credentials: true`. A
+  wildcard origin is rejected by browsers once credentials are involved, which is the correct
+  default: a cookie-bearing cross-origin request has to name who may make it. Same-origin policy is
+  a browser rule and CORS is the server choosing to relax it — neither exists server-to-server,
+  which is why the server-component fetches never needed either.
+- All app-level middleware and pipes live in one `configureApp()` function
+  (`api/src/setup-app.ts`), called from `main.ts` **and** from the test harness. This is listed as
+  a security control deliberately: the earlier arrangement had helmet, the cookie parser and the
+  global validation pipe registered only in `main.ts`, so the entire integration suite ran against
+  an app with **no request validation at all** and stayed green. A control that isn't exercised by
+  the tests is a control nobody is checking.
 
-**Not addressed:** no CORS policy yet — not needed while the frontend uses server components,
-required as soon as anything fetches from a client component. Default Nest error responses in
-production would need review.
+**Not addressed:** default Nest error responses in production would need review. TLS is a
+deployment concern (chapter 9).
 
 ## A06 — Vulnerable and Outdated Components
 
-**Partially addressed.** Dependencies are current at time of writing. There is no automated
-check — `npm audit` in CI and a Dependabot (or equivalent) configuration belong in chapter 8.
+**Partially addressed.** Dependencies are current at time of writing and lockfiles are committed.
+There is still no automated check: `npm audit` as a CI step and a Dependabot (or equivalent)
+configuration are both outstanding. CI exists now (see A08), so this is a step to add rather than
+infrastructure to build.
 
 ## A07 — Identification and Authentication Failures
 
@@ -121,13 +140,29 @@ check — `npm audit` in CI and a Dependabot (or equivalent) configuration belon
   immediately. A denylist would close it at the cost of a lookup per request.
 - No login rate limiting or account lockout. The existing rate limiter covers ticket endpoints
   and keys on IP; brute-force protection on `/auth/login` is a real gap.
-- No logout endpoint (revoke the family), no email verification, no password reset, no MFA.
+- No email verification, no password reset, no MFA.
 - Expired and revoked refresh token rows are never cleaned up.
+- **No single-flight refresh on the client.** Two concurrent 401s each call `/auth/refresh`; with
+  rotation, the loser presents an already-spent token, which looks exactly like a leak and revokes
+  the whole family — logging the user out. The fix is to hold the in-flight promise in a ref, and/or
+  a short server-side grace window accepting the immediately-previous token. Same root cause as the
+  two-tab case.
+
+**Added since the first version of this document:** `POST /auth/logout` revokes every unrevoked
+token in the family and clears the cookie. It answers 204 and never throws — an unknown or missing
+token is treated as already logged out, since telling a caller that their token was unrecognised
+leaks information and helps nobody.
 
 ## A08 — Software and Data Integrity Failures
 
-**Partially addressed.** Lockfiles are committed. CI with a verified build pipeline is
-chapter 8. No artifact signing.
+**Partially addressed.** Lockfiles are committed and CI runs on every push
+(`.github/workflows/ci.yml`): two parallel jobs that lint, build and — for the API — run the
+integration suite against a real Postgres and Redis started by Testcontainers. `npm ci` is used
+rather than `npm install`, so a lockfile that disagrees with `package.json` fails the build instead
+of being silently resolved. The Node version comes from `.nvmrc` via `node-version-file`, so local
+and CI cannot drift apart.
+
+**Not addressed:** no artifact signing, no provenance attestation, no dependency scanning (A06).
 
 ## A09 — Security Logging and Monitoring Failures
 
@@ -138,6 +173,48 @@ token leaked, which is exactly the thing worth waking someone for. Tracing is ch
 ## A10 — Server-Side Request Forgery
 
 **Not applicable.** The API makes no outbound HTTP requests on behalf of user input.
+
+---
+
+## Token storage: `localStorage` vs httpOnly cookies
+
+The decision that shapes most of the auth surface, written out because it is the one an interviewer
+is most likely to push on. There are two workable designs and they trade different risks.
+
+**Option 1 — both tokens in `localStorage`, sent as `Authorization: Bearer …`.**
+
+- Simple: one mechanism, no cookie semantics, trivially CORS-friendly, works the same for a web
+  app, a mobile app and a CLI.
+- **Any XSS reads both tokens.** `localStorage` is readable by every script running on the page,
+  including one injected through a dependency you didn't audit. Stolen refresh token means
+  persistent access, not a 15-minute window.
+- No CSRF exposure at all, because nothing is attached automatically.
+
+**Option 2 — access token in memory, refresh token in an httpOnly cookie.** This is what Doorman
+does.
+
+- `httpOnly` means **JavaScript cannot read the cookie**, so theft-by-script is off the table even
+  if the page is compromised. The access token lives in a JavaScript variable and dies with the tab,
+  so there's nothing durable to steal.
+- The cost: the browser now attaches that cookie **automatically**, which is exactly what CSRF
+  exploits — a malicious page causes your browser to make an authenticated request.
+- That is closed by `SameSite=Lax`, which tells the browser not to attach the cookie on
+  cross-site requests (a form post or `fetch` from another origin); it still works for a normal
+  top-level navigation to the site.
+- Further narrowing: `path=/auth` means the cookie is only sent to the refresh and logout routes,
+  not to every API request. `Secure` restricts it to HTTPS in production.
+- The remaining friction is operational, not security: it needs an explicit CORS origin with
+  `credentials: true`, and `clearCookie` must repeat the same `path` or it silently clears nothing.
+
+**Why option 2 here.** The threat that actually matters for a ticketing system is a stolen
+long-lived credential, and `httpOnly` removes the script-readable copy of it. CSRF is a solved
+problem with a one-line cookie attribute; XSS-readable refresh tokens are not solvable from the
+server side at all. The access token being in memory — so a reload briefly has no credential and
+calls `/auth/refresh` — is the price, and it's cheap.
+
+**What would change the answer:** a native mobile client, or third-party API consumers, where
+cookies are awkward or meaningless. Then bearer tokens with short lifetimes and a server-side
+denylist is the more honest design.
 
 ---
 

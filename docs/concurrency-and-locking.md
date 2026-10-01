@@ -53,15 +53,18 @@ Why 2 tickets rather than 1: the fifty requests landed in roughly two waves, and
 read after the first wave's writes had committed. The exact number is a timing accident — that's
 the nature of a race condition, and it's why you cannot find this bug by clicking around.
 
-## 3. The fix, in three parts
+## 3. The fix
 
-### Part 1 — a transaction
+Two parts make it correct. A third makes it fast. Keeping those apart matters — "which of these
+actually fixes the bug?" is the obvious follow-up question, and the three-as-one answer falls over.
+
+### Correctness, part 1 — a transaction
 
 Wrap the read and the write so they are one indivisible unit: either both happen or neither does.
 Necessary, but on its own not sufficient — at Postgres's default isolation level (READ COMMITTED)
 two transactions can still both read the same row as available.
 
-### Part 2 — `FOR UPDATE`
+### Correctness, part 2 — `FOR UPDATE`
 
 Adding `FOR UPDATE` to a `SELECT` doesn't just read the rows, it **locks** them until the
 transaction ends. Another transaction trying to select the same rows `FOR UPDATE` blocks and waits.
@@ -77,17 +80,29 @@ Two lock modes matter:
 write.** A share lock is not enough here — two requests could both take one on the same ticket,
 both pass the availability check, and the bug survives.
 
-### Part 3 — `SKIP LOCKED`
+### Throughput — `SKIP LOCKED`
 
-With `FOR UPDATE` alone, fifty requests queue behind the same row and get served one at a time.
-Correct, but it has thrown away all concurrency.
+**This part is not what makes the code correct.** With `FOR UPDATE` alone the answers are already
+right: fifty requests queue behind the same rows, ten succeed, forty get a proper 400. They just do
+it one at a time, so correctness has been paid for with all of the concurrency.
 
-`SKIP LOCKED` says: don't wait for a locked row, skip it and take the next unlocked one.
+`SKIP LOCKED` says: don't wait for a locked row, skip it and take the next unlocked one. Fifty
+concurrent requests then take **different** rows simultaneously — and the response codes come out
+identical.
 
-Now fifty concurrent requests grab **different** rows simultaneously. Ten succeed, forty find
-nothing available and get a proper 400.
+> **The transaction and `FOR UPDATE` make it correct. `SKIP LOCKED` makes it fast.**
 
-> **`SKIP LOCKED` turns contention into parallelism.**
+Measured by removing each part in turn, 50 concurrent requests against 10 tickets:
+
+| Implementation | 201 | 400 | Held | Unsold |
+|---|---|---|---|---|
+| no lock | 50 | 0 | **2** | **8** |
+| `FOR UPDATE` | 10 | 40 | 10 | 0 |
+| `FOR UPDATE SKIP LOCKED` | 10 | 40 | 10 | 0 |
+
+Commenting out `setOnLocked('skip_locked')` changes nothing at all. Removing
+`setLock('pessimistic_write')` brings the lost update straight back. An earlier version of this
+document presented all three as one fix, which was wrong.
 
 The three options when a row you want is already locked:
 
@@ -109,7 +124,7 @@ async hold(ticketTypeId: string, quantity: number, userId: string) {
     const tickets = await manager
       .createQueryBuilder(Ticket, 'ticket')
       .setLock('pessimistic_write')     // FOR UPDATE
-      .setOnLocked('skip_locked')       // SKIP LOCKED
+      .setOnLocked('skip_locked')       // SKIP LOCKED — throughput, not correctness
       .where({ ticketTypeId, status: 'available' })
       .limit(quantity)                  // NOT take() — see below
       .getMany();
@@ -219,3 +234,15 @@ Correct result: 10 × `201`, 40 × `400`, 10 held, 0 available.
 
 To see the generated SQL, set `logging: true` in `database.module.ts` (the app's config — not
 `data-source.ts`, which is the CLI's) and look for `FOR UPDATE SKIP LOCKED` at the end of the select.
+
+### The automated version
+
+This is now covered by `api/test/concurrency.e2e-spec.ts`, which fires the same 50 requests at a
+Postgres started by Testcontainers and asserts held, available **and the number of distinct
+holders** — that last one being the assertion that catches a lost update, since a held count can
+look correct while two people have each been told they own the same row. The test harness raises
+`RATE_LIMIT_PER_MINUTE` for that suite, so there is nothing to disable by hand any more.
+
+Re-running it with `setLock` or `setOnLocked` commented out is how the table in section 3 was
+produced. That is the cheapest way to check a claim about concurrent behaviour: delete the part
+you think is responsible and see whether anything changes.
